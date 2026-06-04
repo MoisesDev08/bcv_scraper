@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging, logging.config, logging.handlers
 
 # --- DIRS ---
 
@@ -26,3 +27,33 @@ TABLE_SELECTOR = "div.view-content > table.views-table.cols-2.table.table-0"
 
 # DEBE SER USADO EN EL TAG "TABLE"
 LINK_SELECTOR = "tbody tr span.file a[href$='.xls']" # revisar validez
+
+# --- LOGGING DICTCONFIG ---
+dict_config = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {
+            "format": "[{levelname}] {name}: {message}",
+            "style": "{"
+        }
+    },
+
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "DEBUG",
+            "formatter": "simple" 
+        }
+    },
+
+    "loggers": {
+        "": {
+            "handlers": ["console"],
+            "level": "DEBUG"
+        }
+    }
+}
+
+def setup_logging_config():
+    logging.config.dictConfig(dict_config)

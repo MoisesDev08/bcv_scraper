@@ -1,63 +1,74 @@
 import requests
 from tenacity import (
     retry, retry_if_exception_type, 
-    stop_after_delay, wait_exponential_jitter,
+    stop_after_attempt, wait_exponential_jitter,
     after_log
 )
 
-import fake_useragent
+from fake_useragent import FakeUserAgentError, UserAgent
 from bcv import config as cf
 import logging
 import requests.exceptions
+from exceptions import HTTPClientError
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-class RetryableError(Exception): pass
+class RetryableError(Exception): ...
 class HttpClient():
 
     def __init__(self):
         self.session = requests.Session()
         try:
-            self.ua = fake_useragent.UserAgent()
-        except Exception:
-            logger.debug("fake_useragent failed, using fallback UA")
+            self.ua = UserAgent()
+        
+        except (ImportError, ValueError, TypeError, FakeUserAgentError) as e:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"self.ua = UserAgent raised {e}\nUsing self.ua = None that it will call the fallback")
+            
             self.ua = None
 
     @staticmethod
-    def _fallback_user_agent_helper():
+    def _fallback_user_agent_helper() -> str:
     
-        logger.debug("Calling to _fallback_user_agent_helper()")
         ua = (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/148.0.0.0 Safari/537.36 Edg/148.0.0.0"
         )
-        
         return ua
 
-    def _get_user_agent(self):
+    def _get_user_agent(self) -> str:
         try:
 
-            logger.debug("Calling to _get_user_agent()")
-            if self.ua:
+            if isinstance(self.ua, UserAgent):
                 ua = self.ua.random
-                logger.debug(f"User-Agent gotten:\n{ua}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f"UA gotten from fake_useragent module:\n{ua}")
+
                 return ua
 
             ua = self._fallback_user_agent_helper()
-            logger.debug(f"User-Agent gotten:\n{ua}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "FakeUserAgent failed, calling to _fallback_user_agent_helper() %s", 
+                    f"UA gotten:\n{ua}"
+                    )
+
             return ua
         
-        except Exception:
-
-            logger.debug("Error during call to _get_user_agent()", exc_info=True)
-            return self._fallback_user_agent_helper()
-
+        except (ImportError, ValueError, TypeError, FakeUserAgentError) as e:
             
-    def _get_headers(self): 
+            logger.warning("Error during getting the user agent\nCalling fallback...")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Error Traceback:\n\n", exc_info=True)
+            return self._fallback_user_agent_helper()
+        
+        except Exception as e: raise HTTPClientError(f"Unexpected error: {e}")
+
+    def _get_headers(self) -> dict[str, str]: 
 
         try:
-            logger.debug("Calling to _get_headers()")
             headers = {
                 "accept": (
                     "text/html,application/xhtml+xml,"
@@ -70,11 +81,12 @@ class HttpClient():
                 "user-agent": self._get_user_agent()  
             }
 
-            logger.debug(f"Headers gotten:\n{headers}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Headers gotten:\n{headers}")
             return headers
-        except Exception:
-            logger.error("Error during call to _get_headers()", exc_info=True)
-            raise
+        except Exception as e:
+
+            raise HTTPClientError(f"Unexpected error getting headers for the request: {e}")
 
 
     @retry(
@@ -82,42 +94,52 @@ class HttpClient():
                 requests.exceptions.ConnectionError, 
                 requests.exceptions.Timeout,
                 RetryableError)),
-            stop=stop_after_delay(30),
+            stop=stop_after_attempt(5),
             wait=wait_exponential_jitter(exp_base=2, max=10),
-            after=after_log(logger, logging.WARNING)
+            after=after_log(logger, logging.DEBUG)
     )
-    def fetch(self, page: int = None):
+    def fetch(self, page: int = None) -> requests.Response: 
+        """Send the get requests and give the Response obj
+        
+        - Note: *The headers used for this client have "https://www.bcv.org.ve/" as referer*"""
 
-        response = None
         try:
+            response = self._do_request(page)
+            return response
+        
+        except requests.exceptions.HTTPError as e:
 
-            logger.debug("Calling to fetch()")
-            response = self.session.get(
-                    url=cf.URL_WITH_XLS_FILES,
-                    headers=self._get_headers(),
-                    verify=cf.CERT_PATH,
-                    params={"page": page}
-                )
+            status = e.response.status_code if e.response else None
+            if status != None and status in (408, 429, 500, 502, 503, 504): 
+                logger.warning("Error during request, retrying...")
+                raise RetryableError from e
             
-            if response is None:
-                logger.debug(f"Response object was never created")
-                raise RetryableError
+            else:
 
-            response.raise_for_status()
-            logger.debug("Fetching Succesfully!")
-            return response.text
+                raise HTTPClientError(
+                    f"HTTP error {status}: {e}",
+                    url=cf.URL_WITH_XLS_FILES,
+                    status_code=status
+                    ) from e
+        
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            raise RetryableError from e
         
         except Exception as e:
-            
-            logger.info(f"Error during call to fetch():\n{e}")
-            status = getattr(response, 'status_code', None)
-            if status in (429, 500): raise RetryableError
-            else: 
-                logger.error("Error during call to fetch()", exc_info=True)
-                raise e
+            raise HTTPClientError(f"Unexpected error: {e}") from e
 
-if __name__ == '__main__':
-    
-    cf.setup_logging_config()
-    client = HttpClient()
-    print(client.fetch()[:2000])
+    def _do_request(self, page: int | None) -> requests.Response:
+
+        headers = self._get_headers()
+        params = {"page": page} if page is not None else None
+        response = self.session.get(
+                url=cf.URL_WITH_XLS_FILES,
+                headers=headers,
+                verify=cf.CERT_PATH,
+                params=params,
+                timeout=10
+            )
+
+        response.raise_for_status()
+        logger.info("Fetching Succesfully!")
+        return response

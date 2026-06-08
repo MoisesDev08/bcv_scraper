@@ -22,11 +22,19 @@ URL_WITH_XLS_FILES = "https://www.bcv.org.ve/estadisticas/tipo-cambio-de-referen
 
 # --- PARSER SELECTORS ---
 
-DOLAR_RATE_SELECTOR = "div#dolar strong.strong-tb" 
+FECHA_VALOR_DOLAR_SELECTOR = "div.pull-right.dinpro.center span.date-display-single[content]"
+DOLAR_RATE_SELECTOR = "div#dolar strong.strong-tb"
 TABLE_SELECTOR = "div.view-content > table.views-table.cols-2.table.table-0"
 
 # DEBE SER USADO EN EL TAG "TABLE"
 LINK_SELECTOR = "tbody tr span.file a[href$='.xls']" # revisar validez
+# content="2026-06-09T00:00:00-04:00"
+# --- ISOFORMAT REGEX PATTER ---
+ISOFORMAT_PATTERN = (
+    r"^\d{4}-\d{2}-\d{2}"
+    r"T\d{2}:\d{2}:\d{2}"
+    r"[+-]\d{2}:\d{2}$"
+)
 
 # --- LOGGING DICTCONFIG ---
 dict_config = {

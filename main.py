@@ -4,7 +4,6 @@ from scraper.html_parser import DolarRateScraper
 from scraper.exceptions import *
 import logging
 
-PYTHONPATH_DEBUG = False
 logger = logging.getLogger(__name__)
 
 def main():

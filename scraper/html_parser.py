@@ -2,26 +2,11 @@ from bcv import config as cf
 from bs4 import BeautifulSoup, Tag
 import logging, re
 from datetime import datetime
-from bcv.scraper.exceptions import HTMLParserError
+from bcv.scraper.exceptions import HTMLParserError, SelectorNotFound
 from typing import Any
 from dateutil.parser import parse
 
 logger = logging.getLogger(__name__)
-
-
-class SelectorNotFound(HTMLParserError):
-    """Exception for errors related to CSS selectors. __repr__ method
-    print the items from the variable self.context
-
-    ### Params
-
-    * *mensaje* (str): exception message
-    * ***context* (dict): dict with kwargs for context
-    
-    #### Inheritance:
-    Exception > MiBaseException > HTMLParserError > SelectorNotFound
-    """
-    pass
 
 class DolarRateScraper: 
     """Class with all the logic related to the dolar rate scraping
@@ -199,15 +184,15 @@ class LinksXLSFilesScraper:
         self.soup_links = BeautifulSoup(html, 'lxml')
         self._links = None
 
-    def _links_validator_helper(self, list_links_tags: list[Tag]) -> list[str]: 
+    def _links_validator_helper(self, list_links_tags: dict[str, Tag]) -> list[tuple[str, str]]: 
         
         hf_err = 0
         valid_links = []
-        for tag in list_links_tags:
+        for k, tag in list_links_tags.items():
 
-            href = tag.get("href")
+            href = tag.get("href").strip()
             if isinstance(href, str) and href.endswith(".xls"):
-                valid_links.append(href)
+                valid_links.append((k, href))
             
             else:
                 hf_err += 1
@@ -221,8 +206,41 @@ class LinksXLSFilesScraper:
         if logger.isEnabledFor(logging.DEBUG): logger.debug(f"{hf_err} errors during links validation")
         return valid_links
         
-    def get_links(self) -> list[str]:
-        """Make the HTML scraping and give a list with the links of the XLS files"""
+    def _get_links_helper(self, tr_tags: list[Tag]) -> dict:
+
+            title_selector = "td.views-field.views-field-title"
+            list_links_tags = {}
+            for tag in tr_tags:
+
+                title_tag = tag.select_one(title_selector)
+                link_tag = tag.select_one(cf.LINK_SELECTOR)
+
+                if title_tag is None: 
+                    logger.warning("Could not find title Tag element in row, continue...")
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(f"Row tag without title element; {tag.prettify()[:150]}")
+                    
+                    continue
+
+                if link_tag is None:
+                    logger.warning("Could not find link Tag element in row, continue...")
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(f"Row tag without link element; {tag.prettify()[:150]}")
+                    
+                    continue
+                
+                k = title_tag.get_text(strip=True)
+                list_links_tags[k] = link_tag
+
+            return list_links_tags
+        
+    def get_links(self) -> list[tuple[str, str]]:
+        """Make the HTML scraping and give a list with the links of the XLS files
+        
+        - **Return**: ***list[tuple[name, url]]***
+            -   name (str): File name from the scraping
+            -   url (str): Link for do the get request and download the file
+            """
 
         table_tag = self.soup_links.select_one(cf.TABLE_SELECTOR)
         if table_tag is None: 
@@ -231,34 +249,57 @@ class LinksXLSFilesScraper:
                 "Could not find table Tag element",
                 selector=cf.TABLE_SELECTOR
             )
-
-        list_links_tags = table_tag.select(cf.LINK_SELECTOR)
-        if not list_links_tags:
+        
+        tr_tags = table_tag.select("tbody > tr")
+        if not tr_tags:
 
             raise SelectorNotFound(
-                "Could not find links Tag elements",
-                selector=cf.LINK_SELECTOR,
+                "Could not find rows 'tr' Tag elements in table",
+                selector=(cf.TABLE_SELECTOR + "tbody > tr"),
                 table_chunk=table_tag.prettify()[:300]
             )
         
-        self.links = list_links_tags
+        dict_links_tags = self._get_links_helper(tr_tags)
+        self.links = dict_links_tags
         return self.links
+    
+    def next_page_enabled(self) -> bool:
+
+        selector = cf.NEXT_PAGE_SELECTOR
+        tag = self.soup_links.select(selector)
+        len_tag = len(tag)
+        if len_tag > 1: raise HTMLParserError(
+            "Multiple 'Next Page' buttons were found.", 
+            len_tag=len_tag, 
+            tag=[x.prettify()[:100] for x in tag],
+            selector=selector
+            )
+        
+        if len_tag == 0: 
+            logging.warning("No 'Next Page' button were found. This might be the last page")
+            return False
+
+        return True
     
     @property
     def links(self):
         return self._links
     
     @links.setter
-    def links(self, value: list[Tag]):
+    def links(self, value: list[dict[str, Tag]]):
         v = self._links_validator_helper(value)
         self._links = v
+
 
 class HTMLScraper:
     """HTMl scraper with utils for scrape the dolar rate or the links to
     the files with the dolar rate history.
 
-    *Use cada scraper individualmente segun la accion para evitar problemas de acceso, 
-    los scrapers estan expuestos en **self.dolar_scraper** y **self.links_scraper*** 
+    *Use los métodos **self.get_links** y **self.get_dolar_rate** para obtener datos y evitar
+    problemas de acceso en la composición*
+
+    *Si insiste en los scrapers use cada scraper individualmente segun la accion para evitar problemas 
+    de acceso, los scrapers estan expuestos en **self.dolar_scraper** y **self.links_scraper*** 
     
     ### Params
 

@@ -19,6 +19,30 @@ class MiBaseException(Exception):
             f"  context={{\n{ctx_lines}\n  }}\n)"
         )
 
-
+# --- HTMLPARSER EXCEPTIONS ---
 class HTMLParserError(MiBaseException): ...
+class SelectorNotFound(HTMLParserError):
+    """Exception for errors related to CSS selectors. __repr__ method
+    print the items from the variable self.context
+
+    ### Params
+
+    * *mensaje* (str): exception message
+    * ***context* (dict): dict with kwargs for context
+    
+    #### Inheritance:
+    Exception > MiBaseException > HTMLParserError > SelectorNotFound
+    """
+    pass
+
+# --- HTTPCLIENT EXCEPTIONS ---
 class HTTPClientError(MiBaseException): ...
+class RetryableError(MiBaseException):...
+
+# --- DOWNLOADER EXCEPTIONS ---
+class DownloadError(MiBaseException): ...
+class EmptyFileError(DownloadError):...
+class NotAExcelFile(DownloadError):...
+class HTMLInvalidWarning(DownloadError):...
+
+class PipelineModuleError(MiBaseException): ...

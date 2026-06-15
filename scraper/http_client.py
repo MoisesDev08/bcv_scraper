@@ -9,12 +9,11 @@ from fake_useragent import FakeUserAgentError, UserAgent
 from bcv import config as cf
 import logging
 import requests.exceptions
-from exceptions import HTTPClientError
+from bcv.scraper.exceptions import HTTPClientError, RetryableError
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-class RetryableError(Exception): ...
 class HttpClient():
 
     def __init__(self):
@@ -88,23 +87,33 @@ class HttpClient():
 
             raise HTTPClientError(f"Unexpected error getting headers for the request: {e}")
 
-
+    RETRY_ATTEMPS: int = 5
     @retry(
             retry=retry_if_exception_type((
                 requests.exceptions.ConnectionError, 
                 requests.exceptions.Timeout,
                 RetryableError)),
-            stop=stop_after_attempt(5),
+            stop=stop_after_attempt(RETRY_ATTEMPS),
             wait=wait_exponential_jitter(exp_base=2, max=10),
             after=after_log(logger, logging.DEBUG)
     )
-    def fetch(self, page: int = None) -> requests.Response: 
+    def fetch(
+        self,
+        url:str = None,
+        page: int = None,
+        stream: bool = None,
+        head: bool = None
+    ) -> requests.Response: 
         """Send the get requests and give the Response obj
         
-        - Note: *The headers used for this client have "https://www.bcv.org.ve/" as referer*"""
+        Notes: 
+        
+        - *The headers used for this client have "https://www.bcv.org.ve/" as referer*
+        - *If not url given, it is used "https://www.bcv.org.ve/estadisticas/tipo-cambio-de-referencia-smc"*"""
 
         try:
-            response = self._do_request(page)
+            url = url if url else cf.URL_WITH_XLS_FILES
+            response = self._do_request(page=page, url=url, stream=stream, head=head)
             return response
         
         except requests.exceptions.HTTPError as e:
@@ -118,7 +127,7 @@ class HttpClient():
 
                 raise HTTPClientError(
                     f"HTTP error {status}: {e}",
-                    url=cf.URL_WITH_XLS_FILES,
+                    url=url,
                     status_code=status
                     ) from e
         
@@ -128,17 +137,36 @@ class HttpClient():
         except Exception as e:
             raise HTTPClientError(f"Unexpected error: {e}") from e
 
-    def _do_request(self, page: int | None) -> requests.Response:
+    def _do_request(
+            self, 
+            page: int | None, 
+            url: str, 
+            stream: bool = None,
+            head: bool = None
+            ) -> requests.Response:
 
         headers = self._get_headers()
         params = {"page": page} if page is not None else None
-        response = self.session.get(
-                url=cf.URL_WITH_XLS_FILES,
-                headers=headers,
-                verify=cf.CERT_PATH,
-                params=params,
-                timeout=10
-            )
+        if head is True:
+
+            response = self.session.head(
+                    url=url,
+                    headers=headers,
+                    verify=cf.CERT_PATH,
+                    params=params,
+                    timeout=10,
+                    stream=stream
+                )
+        else:
+
+            response = self.session.get(
+                    url=url,
+                    headers=headers,
+                    verify=cf.CERT_PATH,
+                    params=params,
+                    timeout=10,
+                    stream=stream
+                )
 
         response.raise_for_status()
         logger.info("Fetching Succesfully!")

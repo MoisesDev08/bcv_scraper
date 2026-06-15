@@ -27,8 +27,8 @@ DOLAR_RATE_SELECTOR = "div#dolar strong.strong-tb"
 TABLE_SELECTOR = "div.view-content > table.views-table.cols-2.table.table-0"
 
 # DEBE SER USADO EN EL TAG "TABLE"
-LINK_SELECTOR = "tbody tr span.file a[href$='.xls']" # revisar validez
-# content="2026-06-09T00:00:00-04:00"
+LINK_SELECTOR = "span.file a[href$='.xls']"
+NEXT_PAGE_SELECTOR = "div.text-center ul.pagination li.next a"
 # --- ISOFORMAT REGEX PATTER ---
 ISOFORMAT_PATTERN = (
     r"^\d{4}-\d{2}-\d{2}"

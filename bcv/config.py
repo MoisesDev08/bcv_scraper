@@ -3,12 +3,23 @@ import logging, logging.config, logging.handlers
 
 # --- DIRS ---
 ROOT_DIR = Path(__file__).parent.parent
+BCV_DIR = ROOT_DIR / 'bcv'
 CERT_DIR = ROOT_DIR / "cert"
-TESTS_DIR = ROOT_DIR / "tests"
 DATA_DIR = ROOT_DIR / "data"
-BCV_DIR = Path(__file__).parent
 XLS_HISTORY_DIR = DATA_DIR / "xls_files_history"
 SCRAPER_DIR = BCV_DIR / "scraper"
+
+TESTS_DIR = ROOT_DIR / "tests"
+TESTS_HELPERS_DIR = TESTS_DIR / 'helpers'
+TESTS_FIXTURES_DIR = TESTS_DIR / 'fixtures'
+TESTS_INTEGRATION_DIR = TESTS_DIR / 'integration'
+TESTS_UNIT_DIR = TESTS_DIR / 'unit'
+
+TESTS_SAMPLES_DIR = TESTS_DIR / 'samples'
+TESTS_SAMPLES_HTML_DIR = TESTS_SAMPLES_DIR / 'html'
+TESTS_SAMPLES_JSON_DIR = TESTS_SAMPLES_DIR / 'json'
+TESTS_SAMPLES_XLS_DIR = TESTS_SAMPLES_DIR / 'xls'
+
 
 # --- PATHS ---
 
@@ -28,6 +39,7 @@ TABLE_SELECTOR = "div.view-content > table.views-table.cols-2.table.table-0"
 # DEBE SER USADO EN EL TAG "TABLE"
 LINK_SELECTOR = "span.file a[href$='.xls']"
 NEXT_PAGE_SELECTOR = "div.text-center ul.pagination li.next a"
+
 # --- ISOFORMAT REGEX PATTER ---
 ISOFORMAT_PATTERN = (
     r"^\d{4}-\d{2}-\d{2}"
@@ -68,6 +80,3 @@ dict_config = {
         }
     }
 }
-
-def setup_logging_config():
-    logging.config.dictConfig(dict_config)

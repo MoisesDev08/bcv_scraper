@@ -85,7 +85,6 @@ class XLSParser:
 
         return parse(date_value, dayfirst=True)
         
-
     def _exctract_date_value_from_row(self, df_str: DataFrame, date_row: DataFrame):
 
         date_row = date_row.iloc[0]

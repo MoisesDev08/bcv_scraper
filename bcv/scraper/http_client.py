@@ -8,10 +8,48 @@ from tenacity import (
     stop_after_attempt, wait_exponential_jitter,
     after_log
 )
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 class HttpClient():
+    """
+    Client for safe requests. Use fake_useragent (user rotation) and tenacity (retrys)
+
+    ### Notes
+
+    - Use a fallback with only one user agent if fake_useragent fails
+    - Retry attemps number is showed in the class attr as RETRY_ATTEMPS, 5 as default.
+    !!Be careful if you change it, It's recommended turn on the default manually after change it 
+
+    ### Fallback User Agent:
+
+    ```
+    ua = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/148.0.0.0 Safari/537.36 Edg/148.0.0.0"
+        )
+    ```
+
+    ### Requests Get Headers:
+
+    ```
+    headers = {
+            "accept": (
+                "text/html,application/xhtml+xml,"
+                "application/xml;q=0.9,image/avif,"
+                "image/webp,image/apng,*/*;q=0.8,"
+                "application/signed-exchange;v=b3;q=0.7"
+            ),
+            "accept-language": "en-US,en;q=0.9,es-MX;q=0.8,es;q=0.7",
+            "referer": "https://www.bcv.org.ve/",
+            "user-agent": self._get_user_agent() # fake_useragent.UserAgent().random 
+                                                 # or user agent from fallback  
+        }
+    ```
+
+    """
 
     def __init__(self):
         self.session = requests.Session()
@@ -60,29 +98,25 @@ class HttpClient():
                 logger.debug(f"Error Traceback:\n\n", exc_info=True)
             return self._fallback_user_agent_helper()
         
-        except Exception as e: raise HTTPClientError(f"Unexpected error: {e}")
+        except Exception as e: raise HTTPClientError(f"Unexpected error: {e}", self_ua=self.ua)
 
     def _get_headers(self) -> dict[str, str]: 
 
-        try:
-            headers = {
-                "accept": (
-                    "text/html,application/xhtml+xml,"
-                    "application/xml;q=0.9,image/avif,"
-                    "image/webp,image/apng,*/*;q=0.8,"
-                    "application/signed-exchange;v=b3;q=0.7"
-                ),
-                "accept-language": "en-US,en;q=0.9,es-MX;q=0.8,es;q=0.7",
-                "referer": "https://www.bcv.org.ve/",
-                "user-agent": self._get_user_agent()  
-            }
+        headers = {
+            "accept": (
+                "text/html,application/xhtml+xml,"
+                "application/xml;q=0.9,image/avif,"
+                "image/webp,image/apng,*/*;q=0.8,"
+                "application/signed-exchange;v=b3;q=0.7"
+            ),
+            "accept-language": "en-US,en;q=0.9,es-MX;q=0.8,es;q=0.7",
+            "referer": "https://www.bcv.org.ve/",
+            "user-agent": self._get_user_agent()  
+        }
 
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"Headers gotten:\n{headers}")
-            return headers
-        except Exception as e:
-
-            raise HTTPClientError(f"Unexpected error getting headers for the request: {e}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Headers gotten:\n{headers}\n")
+        return headers
 
     RETRY_ATTEMPS: int = 5
     @retry(
@@ -96,21 +130,43 @@ class HttpClient():
     )
     def fetch(
         self,
-        url:str = None,
-        page: int = None,
-        stream: bool = None,
-        head: bool = None
+        url: str | None = None,
+        page: int | None = None,
+        stream: bool | None = None,
+        head: bool | None = None,
+        verify_bcv_cert: bool | Path | None = None,
+        params: dict | None = None,
+        timeout: int | None = 10
     ) -> requests.Response: 
         """Send the get requests and give the Response obj
         
-        Notes: 
+        ### Notes: 
         
+        - verify_bcv_cert accepts wether bool or Path objects to the cert if given, don't use 
+        verify_bcv_cert=False if you don't know the risks of do a get request with verify=False
+        - Don't use params and page at the same time, page arg creates params={'page': page}
+        - verify_bcv_cert as None will use the bcv.pem certify
         - *The headers used for this client have "https://www.bcv.org.ve/" as referer*
         - *If not url given, it is used "https://www.bcv.org.ve/estadisticas/tipo-cambio-de-referencia-smc"*"""
 
         try:
             url = url if url else cf.URL_WITH_XLS_FILES
-            response = self._do_request(page=page, url=url, stream=stream, head=head)
+            if params and isinstance(page, int): 
+                raise AttributeError(
+                    "Don't use params and page at the same time.\n" \
+                    "Page it's used to create a params argument and to have both cause fatal errors"
+                    )
+            if not params and isinstance(page, int):
+                params = {"page": page}
+
+            response = self._do_request(
+                params = params, 
+                url = url, 
+                stream = stream, 
+                head = head, 
+                verify = verify_bcv_cert,
+                timeout = timeout
+                )
             return response
         
         except requests.exceptions.HTTPError as e:
@@ -131,27 +187,41 @@ class HttpClient():
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
             raise RetryableError from e
         
+        except AttributeError: raise
+        
         except Exception as e:
-            raise HTTPClientError(f"Unexpected error: {e}") from e
+            raise HTTPClientError(
+                f"Unexpected error: {e}",
+                params = params, 
+                url = url, 
+                stream = stream, 
+                head = head, 
+                verify = verify_bcv_cert,
+                timeout = timeout
+                ) from e
 
     def _do_request(
             self, 
-            page: int | None, 
             url: str, 
+            params: dict | None = None,
             stream: bool = None,
-            head: bool = None
+            head: bool = None,
+            verify: bool | Path | None = None,
+            timeout: int | None = None
             ) -> requests.Response:
 
         headers = self._get_headers()
-        params = {"page": page} if page is not None else None
+        if verify is None:
+            verify = cf.CERT_PATH
+         
         if head is True:
 
             response = self.session.head(
                     url=url,
                     headers=headers,
-                    verify=cf.CERT_PATH,
+                    verify=verify,
                     params=params,
-                    timeout=10,
+                    timeout=timeout,
                     stream=stream
                 )
         else:
@@ -159,12 +229,12 @@ class HttpClient():
             response = self.session.get(
                     url=url,
                     headers=headers,
-                    verify=cf.CERT_PATH,
+                    verify=verify,
                     params=params,
-                    timeout=10,
+                    timeout=timeout,
                     stream=stream
                 )
 
         response.raise_for_status()
-        logger.info("Fetching Succesfully!")
+        logger.info(f"Fetching Succesfully to: {url}")
         return response

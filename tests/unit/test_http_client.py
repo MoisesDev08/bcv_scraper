@@ -1,4 +1,5 @@
 from bcv.scraper.http_client import HttpClient
+from bcv.scraper.exceptions import HTTPClientError, RetryableError
 from fake_useragent.errors import FakeUserAgentError
 from bcv import config as c
 import pytest, responses, requests
@@ -71,6 +72,16 @@ def test_prove_fetch_bcv_url_if_not_given(client_instance, rsps):
     assert response.url == "https://www.bcv.org.ve/estadisticas/tipo-cambio-de-referencia-smc"
     assert response.status_code == 200
 
+def test_prove_fetch_bcv_url_if_given(client_instance, rsps):
+    rsps.add(
+        url="https://www.http.org.bin/fake-url-for-test",
+        method=responses.GET
+    )
+
+    response = client_instance.fetch(url="https://www.http.org.bin/fake-url-for-test")
+    assert response.url == "https://www.http.org.bin/fake-url-for-test"
+    assert response.status_code == 200
+
 def test_prove_fetch_params_and_page_exclusive_args(client_instance, rsps_without_assert):
 
     rsps_without_assert.add(
@@ -94,3 +105,29 @@ def test_prove_fetch_page_param_construction(client_instance, rsps):
     parsed_qs = parse_qs(parsed.query)
 
     assert parsed_qs['page'][0] == '0'
+
+@pytest.mark.parametrize(
+        "status_code, attemps",
+        [
+            (408, 1), (429, 2), (500, 3), (502, 4), (503, 5), (504, 1)
+        ]
+        )
+def test_prove_retry_if_status_code_is_retryable_work_and_attemps(client_instance, rsps_without_assert, mocker, status_code, attemps):
+
+    from tenacity import RetryError, stop_after_attempt, wait_none
+    rsps_without_assert.add(
+        method=responses.GET,
+        url="https://www.bcv.org.ve/estadisticas/tipo-cambio-de-referencia-smc",
+        status=status_code
+    )
+
+    spy = mocker.spy(client_instance, "_do_request")
+    client_instance.fetch.retry.stop = stop_after_attempt(attemps)
+    client_instance.fetch.retry.wait = wait_none()
+
+    with pytest.raises((RetryableError, RetryError)) as exc:
+        response = client_instance.fetch()
+
+    assert spy.call_count == attemps
+
+    

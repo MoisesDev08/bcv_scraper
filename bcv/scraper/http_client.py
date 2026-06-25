@@ -171,10 +171,10 @@ class HttpClient():
         
         except requests.exceptions.HTTPError as e:
 
-            status = e.response.status_code if e.response else None
+            status = e.response.status_code if e.response is not None else None
             if status != None and status in (408, 429, 500, 502, 503, 504): 
                 logger.warning("Error during request, retrying...")
-                raise RetryableError from e
+                raise RetryableError(f"Error HTTP: {status}\nReintentando...") from e
             
             else:
 
@@ -185,10 +185,10 @@ class HttpClient():
                     ) from e
         
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-            raise RetryableError from e
+            raise RetryableError("Error de conexión\nReintentando...") from e
         
         except AttributeError: raise
-        
+
         except Exception as e:
             raise HTTPClientError(
                 f"Unexpected error: {e}",

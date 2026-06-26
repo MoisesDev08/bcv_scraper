@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bcv"
+version = "0.1.0"
+description = "Proyecto de scraping con arquitectura limpia"
+authors = [
+    { name = "Moisés", email = "moises@example.com" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests",
+    "tenacity",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "mypy",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]  # errores, pyflakes, isort
+ignore = ["E501"]         # ignora line too long (lo maneja el formatter)
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true

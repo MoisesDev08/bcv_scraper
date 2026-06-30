@@ -1,24 +1,23 @@
 from pathlib import Path
-import logging, logging.config, logging.handlers
 
 # --- DIRS ---
 ROOT_DIR = Path(__file__).parent.parent
-BCV_DIR = ROOT_DIR / 'bcv'
+BCV_DIR = ROOT_DIR / "bcv"
 CERT_DIR = ROOT_DIR / "cert"
 DATA_DIR = ROOT_DIR / "data"
 XLS_HISTORY_DIR = DATA_DIR / "xls_files_history"
 SCRAPER_DIR = BCV_DIR / "scraper"
 
 TESTS_DIR = ROOT_DIR / "tests"
-TESTS_HELPERS_DIR = TESTS_DIR / 'helpers'
-TESTS_FIXTURES_DIR = TESTS_DIR / 'fixtures'
-TESTS_INTEGRATION_DIR = TESTS_DIR / 'integration'
-TESTS_UNIT_DIR = TESTS_DIR / 'unit'
+TESTS_HELPERS_DIR = TESTS_DIR / "helpers"
+TESTS_FIXTURES_DIR = TESTS_DIR / "fixtures"
+TESTS_INTEGRATION_DIR = TESTS_DIR / "integration"
+TESTS_UNIT_DIR = TESTS_DIR / "unit"
 
-TESTS_SAMPLES_DIR = TESTS_DIR / 'samples'
-TESTS_SAMPLES_HTML_DIR = TESTS_SAMPLES_DIR / 'html'
-TESTS_SAMPLES_JSON_DIR = TESTS_SAMPLES_DIR / 'json'
-TESTS_SAMPLES_XLS_DIR = TESTS_SAMPLES_DIR / 'xls'
+TESTS_SAMPLES_DIR = TESTS_DIR / "samples"
+TESTS_SAMPLES_HTML_DIR = TESTS_SAMPLES_DIR / "html"
+TESTS_SAMPLES_JSON_DIR = TESTS_SAMPLES_DIR / "json"
+TESTS_SAMPLES_XLS_DIR = TESTS_SAMPLES_DIR / "xls"
 
 
 # --- PATHS ---
@@ -32,7 +31,9 @@ URL_WITH_XLS_FILES = "https://www.bcv.org.ve/estadisticas/tipo-cambio-de-referen
 
 # --- PARSER SELECTORS ---
 
-FECHA_VALOR_DOLAR_SELECTOR = "div.pull-right.dinpro.center span.date-display-single[content]"
+FECHA_VALOR_DOLAR_SELECTOR = (
+    "div.pull-right.dinpro.center span.date-display-single[content]"
+)
 DOLAR_RATE_SELECTOR = "div#dolar strong.strong-tb"
 TABLE_SELECTOR = "div.view-content > table.views-table.cols-2.table.table-0"
 
@@ -50,33 +51,23 @@ ISOFORMAT_PATTERN = (
 # --- XLS PARSER PATTERNS ---
 # DEBEN SER USADOS CON INSENSITIVE CASE/IGNORE CASE
 
-FECHA_VALOR_PATTERN_XLS_ROW = r"valor[:\s]*(\d{2}/\d{2}/\d{4}[\s]*)"
-FECHA_OPER_PATTERN_XLS_ROW = r"operaci[oó]n[:\s]*(\d{2}/\d{2}/\d{4}[\s]*)"
-TASA_DOLAR_PATTERN_XLS_ROW = r"(usd|e[/.]*u[/.]*a[/.\s]*)"
+FECHA_VALOR_PATTERN_XLS_ROW = r"(?:valor)[:\s]*(?:\d{2}/\d{2}/\d{4}[\s]*)"
+FECHA_OPER_PATTERN_XLS_ROW = r"(?:operaci[oó]n)[:\s]*(?:\d{2}/\d{2}/\d{4}[\s]*)"
+TASA_DOLAR_PATTERN_XLS_ROW = r"(?:usd|e[/.]*u[/.]*a[/.\s]*)"
 
 # --- LOGGING DICTCONFIG ---
 dict_config = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "simple": {
-            "format": "[{levelname}] {name}: {message}",
-            "style": "{"
-        }
+        "simple": {"format": "[{levelname}] {name}: {message}", "style": "{"}
     },
-
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "level": "DEBUG",
-            "formatter": "simple" 
+            "formatter": "simple",
         }
     },
-
-    "loggers": {
-        "": {
-            "handlers": ["console"],
-            "level": "DEBUG"
-        }
-    }
+    "loggers": {"": {"handlers": ["console"], "level": "DEBUG"}},
 }

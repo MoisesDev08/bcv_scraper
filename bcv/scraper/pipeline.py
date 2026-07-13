@@ -3,7 +3,7 @@ from random import uniform
 from time import sleep
 
 import bcv.scraper.validation as v
-from bcv.config import URL_BASE, URL_WITH_XLS_FILES
+from bcv.config.config import URL_BASE, URL_WITH_XLS_FILES
 from bcv.scraper.downloader import Downloader
 from bcv.scraper.exceptions import HTMLInvalidWarning
 from bcv.scraper.html_parser import DolarRateScraper, HTMLScraper, LinksXLSFilesScraper
@@ -96,11 +96,11 @@ def get_recent_history_files_links(
 
 
 def download_all_rate_history_files(
-    path: Path, client: HttpClient | None = None, mkdir: bool = False
+    path: Path, client: HttpClient | None = None, mkdir: bool = False, pages: int = 3
 ):
 
     downloader = Downloader(downloads_dir=path, mkdir=mkdir, client=client)
-    downloader.download(5)
+    downloader.download(pages)
 
 
 def run_pipeline():
@@ -125,6 +125,25 @@ def run_pipeline():
         for link in links:
             print(link)
 
-        if not scraper.links_scraper.next_page_enabled():
+        if not scraper.links_scraper._next_page_enabled():
             print("Program Finished")
             break
+
+
+if __name__ == "__main__":
+    import csv
+
+    from bcv.config.config import DATA_DIR, XLS_HISTORY_DIR
+    from bcv.scraper.xls_parser import XLSParser
+
+    download_all_rate_history_files(XLS_HISTORY_DIR, HttpClient(), mkdir=True)
+    parser = XLSParser(XLS_HISTORY_DIR)
+    rates_generator = parser.run()
+
+    f_path = DATA_DIR / "rates.csv"
+    for date, rate in rates_generator:
+        with f_path.open(mode="a+", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f=f, fieldnames=("date", "rate"))
+            data_dict = {"date": date.strftime("%Y/%m/%d"), "rate": rate}
+
+            writer.writerow(data_dict)

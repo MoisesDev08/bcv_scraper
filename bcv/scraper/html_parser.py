@@ -5,7 +5,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup, Tag
 from dateutil.parser import parse
 
-from bcv import config as cf
+from bcv.config import config as cf
 from bcv.scraper.exceptions import HTMLParserError, SelectorNotFound
 
 logger = logging.getLogger(__name__)
@@ -164,7 +164,15 @@ class DolarRateScraper:
         if self.dolar is None:
             self._get_dolar_rate()
 
-        return (self.fecha_valor, self.dolar)
+        try:
+            return (self.fecha_valor, self.dolar)
+        finally:
+            import gc
+
+            self.soup_dolar.decompose()
+            del self.soup_dolar
+
+            gc.collect()
 
 
 class LinksXLSFilesScraper:
@@ -182,6 +190,7 @@ class LinksXLSFilesScraper:
 
     def __init__(self, html: str):
         self.soup_links = BeautifulSoup(html, "lxml")
+        self.next_page = self._next_page_enabled()
         self._links = None
 
     def _links_validator_helper(
@@ -265,9 +274,19 @@ class LinksXLSFilesScraper:
 
         dict_links_tags = self._get_links_helper(tr_tags)
         self.links = dict_links_tags
-        return self.links
 
-    def next_page_enabled(self) -> bool:
+        try:
+            return self.links
+
+        finally:
+            import gc
+
+            self.soup_links.decompose()
+            del self.soup_links
+
+            gc.collect()
+
+    def _next_page_enabled(self) -> bool:
 
         selector = cf.NEXT_PAGE_SELECTOR
         tag = self.soup_links.select(selector)

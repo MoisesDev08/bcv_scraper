@@ -48,7 +48,7 @@ def test_check_headers(client_instance, k, pttr_expected, ua_patterns):
     resultado = headers.get(k, None)
 
     def func_match(pttr, string):
-        re.search(pttr, string, re.IGNORECASE)
+        return re.search(pttr, string, re.IGNORECASE)
 
     if k == "user-agent":
         list_pttr_expected = ua_patterns
@@ -59,6 +59,7 @@ def test_check_headers(client_instance, k, pttr_expected, ua_patterns):
 
     else:
         match = bool(func_match(pttr_expected, resultado))
+        print(match)
 
     if match is None:
         from ua_parser import user_agent_parser

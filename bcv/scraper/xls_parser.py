@@ -3,14 +3,16 @@ import re
 from datetime import datetime
 from pathlib import Path
 from re import Pattern
+from typing import Any, Generator
 
 import pandas as pd
 from dateutil.parser import ParserError, parse
 from pandas import DataFrame
 from pandas._libs import NaTType
 from pandas._typing import Scalar
+from python_calamine import CalamineWorkbook
 
-from bcv.config import (
+from bcv.config.config import (
     # FECHA_OPER_PATTERN_XLS_ROW,
     FECHA_VALOR_PATTERN_XLS_ROW,
     TASA_DOLAR_PATTERN_XLS_ROW,
@@ -23,14 +25,16 @@ debug_enabled_bool = logger.isEnabledFor(logging.DEBUG)
 
 
 class XLSParser:
-    def __init__(self):
-        self._xls_paths_gen = XLS_HISTORY_DIR.iterdir()
+    def __init__(self, path: Path):
+        self._xls_paths_gen = path.iterdir()
 
     @property
     def xls_paths_gen(self):
         return self._xls_paths_gen
 
-    def _read_excel_helper(self, xls_path: Path) -> dict[str, DataFrame]:
+    def _read_excel_sheets_generator(
+        self, xls_path: Path
+    ) -> Generator[tuple[str, DataFrame], Any, Any]:
         try:
             if not xls_path.exists():
                 raise FileNotFoundError
@@ -38,11 +42,11 @@ class XLSParser:
             if xls_path.is_dir():
                 raise IsADirectoryError
 
-            sheets_dict: dict[str, DataFrame] = pd.read_excel(
-                io=xls_path, sheet_name=None, header=None, engine="calamine"
-            )
-
-            return sheets_dict
+            wb = CalamineWorkbook.from_path(xls_path)
+            for sheet_name in wb.sheet_names:
+                rows = wb.get_sheet_by_name(sheet_name).to_python()
+                df = pd.DataFrame(rows)
+                yield (sheet_name, df)
 
         except Exception as e:
             if debug_enabled_bool:
@@ -79,8 +83,13 @@ class XLSParser:
             return abs(float(cell) - 1) > 1e-04
 
         rates_mask = rates.apply(func)
-        rate = rates[rates_mask].squeeze()
+        rate = rates[rates_mask]
 
+        if isinstance(rate, pd.Series):
+            rate = rate.astype(float).iat[0]
+
+        else:
+            raise ValueError(f"Strange object captured instead dolar rate;{rate}")
         if not isinstance(rate, (float, int)):
             try:
                 float(rate)
@@ -93,8 +102,8 @@ class XLSParser:
 
     def _fecha_valor_parser(self, raw_fecha_valor: str):
 
-        pattern = re.compile(r"(\d{2}/\d{2}/\d{4})")
-        date_value_match = re.search(pattern, raw_fecha_valor, flags=re.IGNORECASE)
+        pattern = re.compile(r"(\d{2}/\d{2}/\d{4})", re.IGNORECASE)
+        date_value_match = re.search(pattern, raw_fecha_valor)
         if not date_value_match:
             raise ValueError(f"No se encontró fecha, string: {raw_fecha_valor}")
 
@@ -141,19 +150,19 @@ class XLSParser:
             date_value = self._exctract_date_value_from_row(df_str, fecha_valor_row)
             return (date_value, dolar_rate)
 
-        except Exception:
+        except Exception as e:
             raise XLSParserError(
-                mensaje="Error during data extraction from excel file",
+                mensaje=f"Error during data extraction from excel file:\n{e}",
                 sheet_name=sheet_name,
                 df=df,
-            )
+            ) from e
 
     def run(self):
 
         for xls in self.xls_paths_gen:
             try:
-                sheets_dict = self._read_excel_helper(xls_path=xls)
-                for name, df in sheets_dict.items():
+                sheets_generator = self._read_excel_sheets_generator(xls_path=xls)
+                for name, df in sheets_generator:
                     # with warnings.catch_warnings():
                     #     warnings.filterwarnings(
                     #         "ignore",
@@ -177,7 +186,20 @@ class XLSParser:
 
 
 if __name__ == "__main__":
+    from bcv.config.config import XLS_HISTORY_DIR
+    from bcv.scraper.http_client import HttpClient
+    from bcv.scraper.pipeline import download_all_rate_history_files
+
     debug_enabled_bool = True
+    t_dwld_start = __import__("time").perf_counter()
+    download_all_rate_history_files(
+        path=XLS_HISTORY_DIR, client=HttpClient(), mkdir=True
+    )
+    t_dwld_finish = __import__("time").perf_counter()
+
+    tiempo_de_descarga_de_todo_el_historial = abs(t_dwld_finish - t_dwld_start)
+    print(tiempo_de_descarga_de_todo_el_historial)
+
     parser = XLSParser()
     data_generator = parser.run()
     json_data = {}
@@ -191,9 +213,10 @@ if __name__ == "__main__":
     t_finish = __import__("time").perf_counter()
     t_ex = t_finish - t_start
     print(t_ex)
-    print(json_data.get("29_06_2026"))
+    print(json_data.get("30_06_2026"))
     print(len(json_data))
 # Compilar regex
 # Evitar .apply() y usar vectorización pura
 # Evitar .squeeze()
 # Validar filas/columnas únicas
+# Eliminar pandas.read_excel(), pasar hojas manualmente a pandas con lazy loading

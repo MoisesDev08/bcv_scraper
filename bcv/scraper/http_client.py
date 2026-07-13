@@ -12,7 +12,7 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
-from bcv import config as cf
+from bcv.config import config as cf
 from bcv.scraper.exceptions import HTTPClientError, RetryableError
 
 logger = logging.getLogger(__name__)
@@ -57,18 +57,19 @@ class HttpClient:
 
     """
 
+    try:
+        UA = UserAgent()
+
+    except (ImportError, ValueError, TypeError, FakeUserAgentError) as e:
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"self.ua = UserAgent raised {e}\nUsing self.ua = None that it will call the fallback"
+            )
+
+        UA = None
+
     def __init__(self):
         self.session = requests.Session()
-        try:
-            self.ua = UserAgent()
-
-        except (ImportError, ValueError, TypeError, FakeUserAgentError) as e:
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(
-                    f"self.ua = UserAgent raised {e}\nUsing self.ua = None that it will call the fallback"
-                )
-
-            self.ua = None
 
     @staticmethod
     def _fallback_user_agent_helper() -> str:
@@ -82,8 +83,8 @@ class HttpClient:
 
     def _get_user_agent(self) -> str:
         try:
-            if isinstance(self.ua, UserAgent):
-                ua = self.ua.random
+            if isinstance(self.UA, UserAgent):
+                ua = self.UA.random
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(f"UA gotten from fake_useragent module:\n{ua}")
 
@@ -105,7 +106,7 @@ class HttpClient:
             return self._fallback_user_agent_helper()
 
         except Exception as e:
-            raise HTTPClientError(f"Unexpected error: {e}", self_ua=self.ua)
+            raise HTTPClientError(f"Unexpected error: {e}", self_ua=self.UA)
 
     def _get_headers(self) -> dict[str, str]:
 
@@ -212,8 +213,8 @@ class HttpClient:
         self,
         url: str,
         params: dict | None = None,
-        stream: bool = None,
-        head: bool = None,
+        stream: bool | None = None,
+        head: bool | None = None,
         verify: bool | Path | None = None,
         timeout: int | None = None,
     ) -> requests.Response:
@@ -226,7 +227,7 @@ class HttpClient:
             response = self.session.head(
                 url=url,
                 headers=headers,
-                verify=verify,
+                verify=verify,  # type: ignore
                 params=params,
                 timeout=timeout,
                 stream=stream,
@@ -235,7 +236,7 @@ class HttpClient:
             response = self.session.get(
                 url=url,
                 headers=headers,
-                verify=verify,
+                verify=verify,  # type: ignore
                 params=params,
                 timeout=timeout,
                 stream=stream,

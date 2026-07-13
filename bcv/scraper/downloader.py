@@ -19,7 +19,10 @@ logger = logging.getLogger(__name__)
 
 class Downloader:
     def __init__(
-        self, downloads_dir: str | Path, mkdir: bool = False, client: HttpClient = None
+        self,
+        downloads_dir: str | Path,
+        mkdir: bool = False,
+        client: HttpClient | None = None,
     ):
         self.client = HttpClient() if not client else client
         self.downloads_dir = v.validate_downloads_dir(downloads_dir, mkdir=mkdir)
@@ -75,7 +78,7 @@ class Downloader:
 
             yield scraper
 
-            if not scraper.next_page_enabled():
+            if not scraper.next_page:
                 logger.info(
                     "Stopping scraper generator because of could not found 'Next Page' button"
                 )
@@ -127,12 +130,17 @@ class Downloader:
             ext = self._choose_ext_helper(get_ext=get_ext, headers_ext=headers_ext)
 
         if ext is None:
-            raise NotAExcelFile(link=link, name=name, destination=destination)
+            raise NotAExcelFile(
+                "No es un archivo excel", link=link, name=name, destination=destination
+            )
 
         if ext and isinstance(ext, str):
             name = name + ext
         path = destination / f"{name}"
         path.write_bytes(r_get.content)
+
+        del r_get
+        del r_head
 
     def download(self, pages_quantity: int):
         """
@@ -149,46 +157,47 @@ class Downloader:
         scraping with the valid pages detected so far.
         """
 
-        scraper_generator: Iterable[LinksXLSFilesScraper] = (
-            self._links_scraper_generator(pages_quantity)
-        )
-        for scraper in scraper_generator:
-            links_list: list[tuple[str, str]] = scraper.get_links()
-            for link_tuple in links_list:
-                name, link = link_tuple
-                destination = self.downloads_dir
+        with self.client.session:
+            scraper_generator: Iterable[LinksXLSFilesScraper] = (
+                self._links_scraper_generator(pages_quantity)
+            )
+            for scraper in scraper_generator:
+                links_list: list[tuple[str, str]] = scraper.get_links()
+                for link_tuple in links_list:
+                    name, link = link_tuple
+                    destination = self.downloads_dir
 
-                try:
-                    self._to_download_xls_and_save(
-                        link=link, name=name, destination=destination
-                    )
-                except NotAExcelFile:
-                    logger.critical(
-                        "No extension detected, downloading without a extension..."
-                    )
-                    ext = ""
-                    name = name + ext
+                    try:
+                        self._to_download_xls_and_save(
+                            link=link, name=name, destination=destination
+                        )
+                    except NotAExcelFile:
+                        logger.critical(
+                            "No extension detected, downloading without a extension..."
+                        )
+                        ext = ""
+                        name = name + ext
 
-                    self._to_download_xls_and_save(
-                        link=link, name=name, destination=destination
-                    )
+                        self._to_download_xls_and_save(
+                            link=link, name=name, destination=destination
+                        )
 
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(f"ulr={link}\npath={destination}\nname={name}")
-                    continue
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(f"ulr={link}\npath={destination}\nname={name}")
+                        continue
 
-                except EmptyFileError:
-                    logger.warning(f"Empty file: {name}")
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug((f"url={link}"))
-                    continue
+                    except EmptyFileError:
+                        logger.warning(f"Empty file: {name}")
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug((f"url={link}"))
+                        continue
 
-                except DownloadError as d:
-                    logger.error(f"DownloadError: {d}")
-                    logger.info("Continue...")
-                    continue
+                    except DownloadError as d:
+                        logger.error(f"DownloadError: {d}")
+                        logger.info("Continue...")
+                        continue
 
-                except RuntimeError as r:
-                    logger.warning(f"{str(r)}")
-                    print("\n\n\n", r, "\n\n\n")
-                    continue
+                    except RuntimeError as r:
+                        logger.warning(f"{str(r)}")
+                        print(r)
+                        continue

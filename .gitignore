@@ -33,3 +33,4 @@ logs/
 # PYTEST
 .pytest_cache/
 *.coverage
+justfile

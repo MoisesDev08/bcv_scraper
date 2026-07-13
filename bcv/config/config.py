@@ -1,7 +1,7 @@
 from pathlib import Path
 
 # --- DIRS ---
-ROOT_DIR = Path(__file__).parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent
 BCV_DIR = ROOT_DIR / "bcv"
 CERT_DIR = ROOT_DIR / "cert"
 DATA_DIR = ROOT_DIR / "data"
